@@ -1,28 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <raylib.h>
-
-#define ASSERT(cond, msg) do {\
-		if (!(cond)) {\
-			fprintf(stderr, "ASSERTION FAILED: %s, %s\n", #cond, msg);\
-			exit(1);\
-		}\
-	} while (0)
-
-#define DYNAMIC_ARRAY_INITIAL_CAPACITY (sizeof(size_t))
-
-#define da_append(da, elm) do {\
-		if ((da).data == NULL) {\
-			(da).capacity = DYNAMIC_ARRAY_INITIAL_CAPACITY;\
-			(da).count = 0;\
-			(da).data = malloc(sizeof(elm) * (da).capacity);\
-		}\
-		if ((da).count + 1 > (da).capacity) {\
-			(da).capacity *= 2;\
-			ASSERT(realloc((da).data, (da).capacity) != NULL, "TODO: Log error instead of asserting");\
-		}\
-		(da).data[(da).count++] = elm;\
-	} while (0)
+#define ENGINE_IMPLEMENTATION
+#include <engine.h>
 
 #define WIDTH  800
 #define HEIGHT 600
@@ -96,8 +73,18 @@ int main(void) {
 	}
 
 	InitWindow(WIDTH, HEIGHT, "Bit Game");
+	
+	float scl = 0.5f;
+	RenderTexture2D ren_tex = LoadRenderTexture((int)(WIDTH*scl), (int)(HEIGHT*scl));
+	if (!IsRenderTextureValid(ren_tex)) {
+		log_error("Failed to create RenderTexture2D!");
+	}
+	log_info("Created RenderTexture2D with dimensions %dx%d", ren_tex.texture.width, ren_tex.texture.height);
+
 	while (!WindowShouldClose()) {
 		BeginDrawing();
+		BeginTextureMode(ren_tex);
+
 		ClearBackground(COLOR1);
 
 		// Update
@@ -112,9 +99,12 @@ int main(void) {
 			draw_component(c);
 		}
 
+		EndTextureMode();
+		draw_ren_tex(ren_tex, WIDTH, HEIGHT);
 		EndDrawing();
 	}
 
+	UnloadRenderTexture(ren_tex);
 	CloseWindow();
 	return 0;
 }
