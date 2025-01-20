@@ -14,12 +14,15 @@
 
 static bool DEBUG_DRAW = true;
 
-Vector2 v2_aligned_to_tile(Vector2 v) {
+Vector2 v2_aligned_to_by(Vector2 v, float by) {
 	Vector2 res = {0};
-	res.x = (float)(((int)v.x / (int)TILE_SIZE) * TILE_SIZE);
-	res.y = (float)(((int)v.y / (int)TILE_SIZE) * TILE_SIZE);
+	res.x = (float)(((int)v.x / (int)by) * by);
+	res.y = (float)(((int)v.y / (int)by) * by);
 	return res;
 }
+
+Vector2 v2_aligned_to_tile(Vector2 v) { return v2_aligned_to_by(v, TILE_SIZE); }
+Vector2 v2_aligned_to_chunk(Vector2 v) { return v2_aligned_to_by(v, TILE_SIZE*CHUNK_TILE_COUNT); }
 
 /// Debug
 void debug_draw_world_grid(float size, Camera2D camera, Color color) {
@@ -27,15 +30,15 @@ void debug_draw_world_grid(float size, Camera2D camera, Color color) {
 	for (int y = -1; y < (HEIGHT/size)+1; ++y) {
 		Vector2 s = { .x = (float)-size, .y = (float)y*size, };
 		Vector2 e = { .x = (float)WIDTH + size, .y = (float)y*size, };
-		s = v2_aligned_to_tile(Vector2Add(s, world_top_left));
-		e = v2_aligned_to_tile(Vector2Add(e, world_top_left));
+		s = v2_aligned_to_by(Vector2Add(s, world_top_left), size);
+		e = v2_aligned_to_by(Vector2Add(e, world_top_left), size);
 		DrawLineV(s, e, color);
 	}
 	for (int x = -1; x < (WIDTH/size)+1; ++x) {
 		Vector2 s = { .x = (float)x*size, .y = (float)-size, };
 		Vector2 e = { .x = (float)x*size, .y = (float)HEIGHT + size, };
-		s = v2_aligned_to_tile(Vector2Add(s, world_top_left));
-		e = v2_aligned_to_tile(Vector2Add(e, world_top_left));
+		s = v2_aligned_to_by(Vector2Add(s, world_top_left), size);
+		e = v2_aligned_to_by(Vector2Add(e, world_top_left), size);
 		DrawLineV(s, e, color);
 	}
 }
@@ -113,7 +116,7 @@ int main(void) {
 
 		mpos = get_mpos_scaled(ren_tex);
 		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-			add_base_component(&components, v2_aligned_to_tile(mpos));
+			add_base_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
 		}
 		// Update
 		for (int i = 0; i < (int)components.count; ++i) {
@@ -141,14 +144,11 @@ int main(void) {
 			draw_component(c);
 		}
 
-
-
 		if (DEBUG_DRAW) {
 			// Draw origin of world
-			DrawCircleV(CLITERAL(Vector2) { 0.f, 0.f }, 2.f, WHITE);
 			debug_draw_world_grid(TILE_SIZE, camera, ColorAlpha(WHITE, 0.25f));
-			// TODO: Chunk grid is drawn wrong
 			debug_draw_world_grid(TILE_SIZE*CHUNK_TILE_COUNT, camera, ColorAlpha(WHITE, 1.f));
+			DrawCircleV(CLITERAL(Vector2) { 0.f, 0.f }, 2.f, RED);
 
 		}
 		EndMode2D();
