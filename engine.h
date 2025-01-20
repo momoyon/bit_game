@@ -7,6 +7,8 @@
 #include <raylib.h>
 #include <raymath.h>
 
+bool DEBUG = false;
+
 #define ASSERT(cond, msg) do {\
 		if (!(cond)) {\
 			fprintf(stderr, "%s:%d:0 ASSERTION FAILED: %s, %s\n", __FILE__, __LINE__, #cond, msg);\
@@ -34,6 +36,7 @@
 		}\
 		if ((da).count + 1 > (da).capacity) {\
 			(da).capacity *= 2;\
+			if (DEBUG) log_info("%s realloced!", #da);\
 			ASSERT(realloc((da).data, (da).capacity * sizeof(*(da).data)) != NULL, "TODO: Log error instead of asserting");\
 		}\
 		(da).data[(da).count++] = elm;\

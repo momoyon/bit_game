@@ -28,16 +28,21 @@ Vector2 v2_aligned_to_chunk(Vector2 v) { return v2_aligned_to_by(v, TILE_SIZE*CH
 /// Debug
 void debug_draw_world_grid(float size, Camera2D camera, Color color) {
 	Vector2 world_top_left = GetScreenToWorld2D(CLITERAL(Vector2) { 0.f, 0.f }, camera);
-	for (int y = -1; y < (HEIGHT/size)+1; ++y) {
+	Vector2 world_bottom_right = GetScreenToWorld2D(CLITERAL(Vector2) { WIDTH, HEIGHT }, camera);
+	Vector2i view_size = {
+		.x = world_bottom_right.x - world_top_left.x,
+		.y = world_bottom_right.y - world_top_left.y,
+	};
+	for (int y = -1; y < (view_size.y/size)+1; ++y) {
 		Vector2 s = { .x = (float)-size, .y = (float)y*size, };
-		Vector2 e = { .x = (float)WIDTH + size, .y = (float)y*size, };
+		Vector2 e = { .x = (float)view_size.x + size, .y = (float)y*size, };
 		s = v2_aligned_to_by(Vector2Add(s, world_top_left), size);
 		e = v2_aligned_to_by(Vector2Add(e, world_top_left), size);
 		DrawLineV(s, e, color);
 	}
-	for (int x = -1; x < (WIDTH/size)+1; ++x) {
+	for (int x = -1; x < (view_size.x/size)+1; ++x) {
 		Vector2 s = { .x = (float)x*size, .y = (float)-size, };
-		Vector2 e = { .x = (float)x*size, .y = (float)HEIGHT + size, };
+		Vector2 e = { .x = (float)x*size, .y = (float)view_size.y + size, };
 		s = v2_aligned_to_by(Vector2Add(s, world_top_left), size);
 		e = v2_aligned_to_by(Vector2Add(e, world_top_left), size);
 		DrawLineV(s, e, color);
@@ -46,6 +51,7 @@ void debug_draw_world_grid(float size, Camera2D camera, Color color) {
 
 typedef enum {
 	COMP_TYPE_BASE,
+	COMP_TYPE_DISPLAY,
 	COMP_TYPE_COUNT,
 } Component_type;
 
@@ -55,6 +61,8 @@ typedef struct {
 	Vector2 size;
 	Vector2i chunk_id; // Chunk id in the world
 	Vector2i tile_id;  // Tile id in the chunk
+
+	int value;
 } Component;
 
 Component make_component(Component_type type, const Vector2 pos) {
@@ -75,6 +83,8 @@ Component make_component(Component_type type, const Vector2 pos) {
 		case COMP_TYPE_BASE: {
 
 				     } break;
+		case COMP_TYPE_DISPLAY: {
+		} break;
 	        case COMP_TYPE_COUNT:
 	        default: ASSERT(0, "UNREACHABLE!");
 	}
@@ -86,6 +96,11 @@ void draw_component(Component* comp) {
 		case COMP_TYPE_BASE: {
 			DrawRectangleV(comp->pos, comp->size, RED);
 			draw_text_aligned(GetFontDefault(), "C", Vector2Add(comp->pos, Vector2Scale(comp->size, 0.5f)), TILE_SIZE, TEXT_ALIGN_V_CENTER, TEXT_ALIGN_H_CENTER, WHITE);
+		} break;
+		case COMP_TYPE_DISPLAY: {
+			DrawRectangleV(comp->pos, comp->size, ORANGE);
+			const char *value_str = tprintf("%d", comp->value);
+			draw_text_aligned(GetFontDefault(), value_str, Vector2Add(comp->pos, Vector2Scale(comp->size, 0.5f)), TILE_SIZE, TEXT_ALIGN_V_CENTER, TEXT_ALIGN_H_CENTER, WHITE);
 		} break;
 	        case COMP_TYPE_COUNT:
 	        default: ASSERT(0, "UNREACHABLE!");
@@ -104,6 +119,12 @@ void add_base_component(Components *components, Vector2 pos) {
 	da_append(*components, comp);
 }
 
+void add_display_component(Components *components, Vector2 pos) {
+	Component comp = make_component(COMP_TYPE_DISPLAY, pos);
+	/*log_info("Added component [%zu]", components->count);*/
+	da_append(*components, comp);
+}
+
 bool component_exists_at(Components *components, Vector2 pos) {
 	Vector2i chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
 	Vector2i tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
@@ -118,7 +139,18 @@ bool component_exists_at(Components *components, Vector2 pos) {
 }
 
 int main(void) {
-	Components components = {0};
+	DEBUG = true;
+	size_t max_components_count = MAX_CHUNK_COUNT*CHUNK_TILE_COUNT;
+	log_info("Max components count: %zu", max_components_count);
+	Components components = {
+		.data = malloc(sizeof(Component)*max_components_count),
+		.count = 0,
+		.capacity = max_components_count,
+	};
+	Components components_next = {
+		.data = malloc(sizeof(Component)*max_components_count),
+	};
+
 
 	Vector2 mpos = {0};
 	Camera2D camera = {
@@ -145,8 +177,13 @@ int main(void) {
 		float delta = GetFrameTime();
 
 		mpos = get_mpos_scaled();
+		/*// Camera zoom*/
+		/*camera.zoom = Clamp(camera.zoom + GetMouseWheelMove() * delta * 10.f, 0.5f, 5.f);*/
 		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
 			add_base_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
+		}
+		if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
+			add_display_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
 		}
 		// Update
 		for (int i = 0; i < (int)components.count; ++i) {
@@ -184,15 +221,16 @@ int main(void) {
 			DrawCircleV(CLITERAL(Vector2) { 0.f, 0.f }, 2.f, RED);
 		}
 
+		EndMode2D();
+
 		// Draw stats
-		Vector2 top_right = GetScreenToWorld2D(v2(WIDTH, 0.f), camera);
+		Vector2 top_right = v2(WIDTH, 0.f);
 		const char *bit_str = tprintf("Bits: %08d", bit);
 		draw_text_aligned(font, bit_str, top_right, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
 
 		const char *turn_str = tprintf("Turn: %10d", turn);
 		Vector2 p = Vector2Add(top_right, v2(0, TILE_SIZE));
 		draw_text_aligned(font, turn_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
-		EndMode2D();
 
 		EndTextureMode();
 		draw_ren_tex(ren_tex, SCREEN_WIDTH, SCREEN_HEIGHT);
