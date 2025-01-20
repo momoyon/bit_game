@@ -38,10 +38,16 @@
 		(da).data[(da).count++] = elm;\
 	} while (0)
 
+// Vector helpers
+Vector2 v2xx(float v);
+
 // Vector2i
 typedef struct {
 	int x, y;
 } Vector2i;
+
+Vector2i v2vi(Vector2 v);
+bool v2i_equal(Vector2i a, Vector2i b);
 
 int _screen_width, _screen_height;
 float _scl;
@@ -71,12 +77,22 @@ void draw_text_aligned(Font font, const char *text, Vector2 pos, int font_size, 
 void draw_text(Font font, const char *text, Vector2 pos, int font_size, Color color);
 
 // Misc
-Vector2 get_mpos_scaled(RenderTexture2D ren_tex);
+Vector2 get_mpos_scaled();
 
 #endif // _ENGINE_H_
 
 // IMPLEMENTATION ////////////////////////////////
 #ifdef ENGINE_IMPLEMENTATION
+
+// Vector helpers
+Vector2 v2xx(float v) { return CLITERAL(Vector2) { v, v }; }
+
+// Vector2i
+Vector2i v2vi(Vector2 v) { return CLITERAL(Vector2i) { (int)v.x, (int)v.y }; }
+
+bool v2i_equal(Vector2i a, Vector2i b) {
+	return a.x == b.x && a.y == b.y;
+}
 
 // Setup
 RenderTexture2D init_window(int screen_width, int screen_height, float scl, const char *title) {
@@ -164,7 +180,7 @@ void draw_text(Font font, const char *text, Vector2 pos, int font_size, Color co
 }
 
 // Misc
-Vector2 get_mpos_scaled(RenderTexture2D ren_tex) {
+Vector2 get_mpos_scaled() {
 	Vector2 m = GetMousePosition();
 	m.x *= _scl;
 	m.y *= _scl;

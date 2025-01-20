@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -ggdb
+CFLAGS=-Wall -Wextra -ggdb -Wswitch-enum
 LIBS=-l:raylib.dll
 
 main: main.c

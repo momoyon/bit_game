@@ -52,6 +52,8 @@ typedef struct {
 	Component_type type;
 	Vector2 pos;
 	Vector2 size;
+	Vector2i chunk_id; // Chunk id in the world
+	Vector2i tile_id;  // Tile id in the chunk
 } Component;
 
 Component make_component(Component_type type, const Vector2 pos) {
@@ -60,6 +62,14 @@ Component make_component(Component_type type, const Vector2 pos) {
 		.pos = pos,
 		.size = CLITERAL(Vector2) { TILE_SIZE, TILE_SIZE }
 	};
+
+	// Calculate chunk and tile id based on position
+	res.chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
+	res.tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
+	res.tile_id.x = res.tile_id.x % CHUNK_TILE_COUNT;
+	res.tile_id.y = res.tile_id.y % CHUNK_TILE_COUNT;
+	/*log_info("Added component at chunk %d, %d", res.chunk_id.x, res.chunk_id.y);*/
+	/*log_info("Added component at tile %d, %d", res.tile_id.x, res.tile_id.y);*/
 	switch (res.type) {
 		case COMP_TYPE_BASE: {
 
@@ -73,8 +83,9 @@ Component make_component(Component_type type, const Vector2 pos) {
 void draw_component(Component* comp) {
 	switch (comp->type) {
 		case COMP_TYPE_BASE: {
-					     DrawRectangleV(comp->pos, comp->size, RED);
-				     } break;
+			DrawRectangleV(comp->pos, comp->size, RED);
+			draw_text_aligned(GetFontDefault(), "C", Vector2Add(comp->pos, Vector2Scale(comp->size, 0.5f)), TILE_SIZE, TEXT_ALIGN_V_CENTER, TEXT_ALIGN_H_CENTER, WHITE);
+		} break;
 	        case COMP_TYPE_COUNT:
 	        default: ASSERT(0, "UNREACHABLE!");
 	}
@@ -88,7 +99,21 @@ typedef struct {
 
 void add_base_component(Components *components, Vector2 pos) {
 	Component comp = make_component(COMP_TYPE_BASE, pos);
+	/*log_info("Added component [%zu]", components->count);*/
 	da_append(*components, comp);
+}
+
+bool component_exists_at(Components *components, Vector2 pos) {
+	Vector2i chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
+	Vector2i tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
+	tile_id.x = tile_id.x % CHUNK_TILE_COUNT;
+	tile_id.y = tile_id.y % CHUNK_TILE_COUNT;
+	for (int i = 0; i < components->count; ++i) {
+		if (v2i_equal(components->data[i].chunk_id, chunk_id) && v2i_equal(components->data[i].tile_id, tile_id)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 #define COMPONENTS_MAX 1024
@@ -107,6 +132,7 @@ int main(void) {
 
 	RenderTexture2D ren_tex = init_window(SCREEN_WIDTH, SCREEN_HEIGHT, SCL, "Bit Game");
 
+	/*Font font = GetFontDefault();*/
 	while (!WindowShouldClose()) {
 		BeginDrawing();
 		BeginTextureMode(ren_tex);
@@ -114,8 +140,8 @@ int main(void) {
 		ClearBackground(COLOR1);
 		float delta = GetFrameTime();
 
-		mpos = get_mpos_scaled(ren_tex);
-		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+		mpos = get_mpos_scaled();
+		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
 			add_base_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
 		}
 		// Update
@@ -145,12 +171,12 @@ int main(void) {
 		}
 
 		if (DEBUG_DRAW) {
-			// Draw origin of world
 			debug_draw_world_grid(TILE_SIZE, camera, ColorAlpha(WHITE, 0.25f));
 			debug_draw_world_grid(TILE_SIZE*CHUNK_TILE_COUNT, camera, ColorAlpha(WHITE, 1.f));
+			// Draw origin of world
 			DrawCircleV(CLITERAL(Vector2) { 0.f, 0.f }, 2.f, RED);
-
 		}
+
 		EndMode2D();
 
 		EndTextureMode();
