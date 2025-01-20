@@ -21,7 +21,7 @@ typedef struct {
 } Component;
 
 Component make_component(Component_type type, const Vector2 pos) {
-	Component res = { 
+	Component res = {
 		.type = type,
 		.pos = pos,
 		.size = CLITERAL(Vector2) { TILE_SIZE, TILE_SIZE }
@@ -57,29 +57,21 @@ void add_base_component(Components *components, Vector2 pos) {
 	da_append(*components, comp);
 }
 
+Vector2 v2_aligned_to_tile(Vector2 v) {
+	Vector2 res = {0};
+	res.x = (float)(((int)v.x / (int)TILE_SIZE) * TILE_SIZE);
+	res.y = (float)(((int)v.y / (int)TILE_SIZE) * TILE_SIZE);
+	return res;
+}
+
 #define COMPONENTS_MAX 1024
 int main(void) {
 
-	// TODO: Make this a dynamic-array
 	Components components = {0};
 
-	add_base_component(&components, CLITERAL(Vector2) { 100.f, 100.f });
-	
-	for (int i = 0; i < (int)components.count; ++i) {
-		// todo: draw components
-		Component *c = &components.data[i];
-		printf("pos: %f, %f\n", c->pos.x, c->pos.y);
-		printf("size: %f, %f\n", c->size.x, c->size.y);
-	}
+	Vector2 mpos = {0};
 
-	InitWindow(WIDTH, HEIGHT, "Bit Game");
-	
-	float scl = 0.5f;
-	RenderTexture2D ren_tex = LoadRenderTexture((int)(WIDTH*scl), (int)(HEIGHT*scl));
-	if (!IsRenderTextureValid(ren_tex)) {
-		log_error("Failed to create RenderTexture2D!");
-	}
-	log_info("Created RenderTexture2D with dimensions %dx%d", ren_tex.texture.width, ren_tex.texture.height);
+	RenderTexture2D ren_tex = init_window(WIDTH, HEIGHT, 0.5f, "Bit Game");
 
 	while (!WindowShouldClose()) {
 		BeginDrawing();
@@ -87,6 +79,10 @@ int main(void) {
 
 		ClearBackground(COLOR1);
 
+		mpos = get_mpos_scaled(ren_tex);
+		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+			add_base_component(&components, v2_aligned_to_tile(mpos));
+		}
 		// Update
 		for (int i = 0; i < (int)components.count; ++i) {
 			// TODO: update components
@@ -104,7 +100,6 @@ int main(void) {
 		EndDrawing();
 	}
 
-	UnloadRenderTexture(ren_tex);
-	CloseWindow();
+	close_window(ren_tex);
 	return 0;
 }
