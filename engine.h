@@ -38,6 +38,11 @@
 		(da).data[(da).count++] = elm;\
 	} while (0)
 
+// Vector2i
+typedef struct {
+	int x, y;
+} Vector2i;
+
 int _screen_width, _screen_height;
 float _scl;
 
@@ -45,8 +50,25 @@ float _scl;
 RenderTexture2D init_window(int screen_width, int screen_height, float scl, const char *title);
 void close_window(RenderTexture2D ren_tex);
 
+typedef enum {
+	TEXT_ALIGN_H_LEFT = 0,
+	TEXT_ALIGN_H_CENTER,
+	TEXT_ALIGN_H_RIGHT,
+	TEXT_ALIGN_H_COUNT,
+} Text_align_h;
+
+// NOTE: Start enum at 10 to not conflict with Text_align_h
+typedef enum {
+	TEXT_ALIGN_V_TOP = 10,
+	TEXT_ALIGN_V_CENTER,
+	TEXT_ALIGN_V_BOTTOM,
+	TEXT_ALIGN_V_COUNT,
+} Text_align_v;
+
 // Draw
 void draw_ren_tex(RenderTexture2D ren_tex, int screen_width, int screen_height);
+void draw_text_aligned(Font font, const char *text, Vector2 pos, int font_size, const Text_align_v align_v, const Text_align_h align_h, Color color);
+void draw_text(Font font, const char *text, Vector2 pos, int font_size, Color color);
 
 // Misc
 Vector2 get_mpos_scaled(RenderTexture2D ren_tex);
@@ -98,6 +120,47 @@ void draw_ren_tex(RenderTexture2D ren_tex, int screen_width, int screen_height) 
 		.height = screen_height,
 	};
 	DrawTexturePro(ren_tex.texture, src, dst, CLITERAL(Vector2) { 0.f, 0.f }, 0.f, WHITE);
+}
+
+void draw_text_aligned(Font font, const char *text, Vector2 pos, int font_size, const Text_align_v align_v, const Text_align_h align_h, Color color) {
+	Vector2 origin = {0};
+	// RLAPI Vector2 MeasureTextEx(Font font, const char *text, float fontSize, float spacing);    // Measure string size for Font
+	float spacing = 2.f;
+	Vector2 text_size = MeasureTextEx(font, text, font_size, spacing);
+
+	switch (align_h) {
+		case TEXT_ALIGN_H_LEFT: {
+		} break;
+		case TEXT_ALIGN_H_CENTER: {
+			origin.x = text_size.x * 0.5f;
+		} break;
+		case TEXT_ALIGN_H_RIGHT: {
+			origin.x = text_size.x;
+		} break;
+		case TEXT_ALIGN_H_COUNT: {
+		} break;
+		default: ASSERT(false, "UNREACHABLE");
+	}
+
+	switch (align_v) {
+		case TEXT_ALIGN_V_TOP: {
+		} break;
+		case TEXT_ALIGN_V_CENTER: {
+			origin.y = text_size.y * 0.5f;
+		} break;
+		case TEXT_ALIGN_V_BOTTOM: {
+			origin.y = text_size.y;
+		} break;
+		case TEXT_ALIGN_V_COUNT: {
+		} break;
+		default: ASSERT(false, "UNREACHABLE");
+	}
+
+	DrawTextPro(font, text, pos, origin, 0.f, font_size, spacing, color);
+}
+
+void draw_text(Font font, const char *text, Vector2 pos, int font_size, Color color) {
+	draw_text_aligned(font, text, pos, font_size, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_LEFT, color);
 }
 
 // Misc
