@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <raylib.h>
 #include <raymath.h>
 
@@ -38,8 +39,27 @@
 		(da).data[(da).count++] = elm;\
 	} while (0)
 
+#define TEMP_BUFF_CAP (1024*4)
+typedef struct {
+	char data[TEMP_BUFF_CAP];
+	size_t count;
+} Buffer;
+
+Buffer temp_buff = {0};
+
+#define tprintf(fmt, ...) ({\
+		if (temp_buff.count >= TEMP_BUFF_CAP) {\
+			temp_buff.count = 0;\
+		}\
+		char *ptr = temp_buff.data + temp_buff.count;\
+		snprintf(ptr, TEMP_BUFF_CAP-temp_buff.count, fmt, ##__VA_ARGS__);\
+		temp_buff.count += strlen(ptr);\
+		ptr;\
+	})
+
 // Vector helpers
 Vector2 v2xx(float v);
+Vector2 v2(float x, float y);
 
 // Vector2i
 typedef struct {
@@ -86,6 +106,7 @@ Vector2 get_mpos_scaled();
 
 // Vector helpers
 Vector2 v2xx(float v) { return CLITERAL(Vector2) { v, v }; }
+Vector2 v2(float x, float y) { return CLITERAL(Vector2) { x, y }; }
 
 // Vector2i
 Vector2i v2vi(Vector2 v) { return CLITERAL(Vector2i) { (int)v.x, (int)v.y }; }

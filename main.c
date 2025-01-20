@@ -11,6 +11,7 @@
 #define COLOR1 GetColor(0x181818FF)
 #define TILE_SIZE 16
 #define CHUNK_TILE_COUNT 16
+#define MAX_CHUNK_COUNT 4
 
 static bool DEBUG_DRAW = true;
 
@@ -108,7 +109,7 @@ bool component_exists_at(Components *components, Vector2 pos) {
 	Vector2i tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
 	tile_id.x = tile_id.x % CHUNK_TILE_COUNT;
 	tile_id.y = tile_id.y % CHUNK_TILE_COUNT;
-	for (int i = 0; i < components->count; ++i) {
+	for (int i = 0; i < (int)components->count; ++i) {
 		if (v2i_equal(components->data[i].chunk_id, chunk_id) && v2i_equal(components->data[i].tile_id, tile_id)) {
 			return true;
 		}
@@ -116,9 +117,7 @@ bool component_exists_at(Components *components, Vector2 pos) {
 	return false;
 }
 
-#define COMPONENTS_MAX 1024
 int main(void) {
-
 	Components components = {0};
 
 	Vector2 mpos = {0};
@@ -128,12 +127,17 @@ int main(void) {
 		.rotation = 0.f,
 		.zoom = 1.f,
 	};
-	float camera_move_speed = 100.f;
+	float camera_move_speed = 200.f;
 
 	RenderTexture2D ren_tex = init_window(SCREEN_WIDTH, SCREEN_HEIGHT, SCL, "Bit Game");
 
-	/*Font font = GetFontDefault();*/
+	// Stats
+	int turn = 0;
+	int bit = 0;
+
+	Font font = GetFontDefault();
 	while (!WindowShouldClose()) {
+		temp_buff.count = 0;
 		BeginDrawing();
 		BeginTextureMode(ren_tex);
 
@@ -162,6 +166,9 @@ int main(void) {
 			camera.target.y += camera_move_speed * delta;
 		}
 
+		// clamp camera to positive axis.
+		camera.target.x = Clamp(camera.target.x, camera.offset.x-1, (MAX_CHUNK_COUNT*CHUNK_TILE_COUNT*TILE_SIZE)-camera.offset.x);
+		camera.target.y = Clamp(camera.target.y, camera.offset.y, (MAX_CHUNK_COUNT*CHUNK_TILE_COUNT*TILE_SIZE)-camera.offset.y+1);
 		BeginMode2D(camera);
 		// Draw
 		for (int i = 0; i < (int)components.count; ++i) {
@@ -177,6 +184,14 @@ int main(void) {
 			DrawCircleV(CLITERAL(Vector2) { 0.f, 0.f }, 2.f, RED);
 		}
 
+		// Draw stats
+		Vector2 top_right = GetScreenToWorld2D(v2(WIDTH, 0.f), camera);
+		const char *bit_str = tprintf("Bits: %08d", bit);
+		draw_text_aligned(font, bit_str, top_right, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
+
+		const char *turn_str = tprintf("Turn: %10d", turn);
+		Vector2 p = Vector2Add(top_right, v2(0, TILE_SIZE));
+		draw_text_aligned(font, turn_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
 		EndMode2D();
 
 		EndTextureMode();
