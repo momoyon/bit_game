@@ -140,7 +140,7 @@ bool component_exists_at(Components *components, Vector2 pos) {
 
 int main(void) {
 	DEBUG = true;
-	size_t max_components_count = MAX_CHUNK_COUNT*CHUNK_TILE_COUNT;
+	size_t max_components_count = MAX_CHUNK_COUNT*(CHUNK_TILE_COUNT*CHUNK_TILE_COUNT);
 	log_info("Max components count: %zu", max_components_count);
 	Components components = {
 		.data = malloc(sizeof(Component)*max_components_count),
