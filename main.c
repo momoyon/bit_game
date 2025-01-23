@@ -1,12 +1,12 @@
 #define ENGINE_IMPLEMENTATION
 #include <engine.h>
 
-#define SCREEN_WIDTH  1280
-#define SCREEN_HEIGHT 720
+int screen_width  = 1280*0.5;
+int screen_height = 720*0.5;
 
 #define SCL 0.5f
-#define WIDTH  (SCREEN_WIDTH*SCL)
-#define HEIGHT (SCREEN_HEIGHT*SCL)
+int width = 0;
+int height = 0;
 
 #define COLOR1 GetColor(0x181818FF)
 #define TILE_SIZE 16
@@ -28,7 +28,7 @@ Vector2 v2_aligned_to_chunk(Vector2 v) { return v2_aligned_to_by(v, TILE_SIZE*CH
 /// Debug
 void debug_draw_world_grid(float size, Camera2D camera, Color color) {
 	Vector2 world_top_left = GetScreenToWorld2D(CLITERAL(Vector2) { 0.f, 0.f }, camera);
-	Vector2 world_bottom_right = GetScreenToWorld2D(CLITERAL(Vector2) { WIDTH, HEIGHT }, camera);
+	Vector2 world_bottom_right = GetScreenToWorld2D(CLITERAL(Vector2) { width, height }, camera);
 	Vector2i view_size = {
 		.x = world_bottom_right.x - world_top_left.x,
 		.y = world_bottom_right.y - world_top_left.y,
@@ -78,7 +78,7 @@ Component make_component(Component_type type, const Vector2 pos) {
 	res.tile_id.x = res.tile_id.x % CHUNK_TILE_COUNT;
 	res.tile_id.y = res.tile_id.y % CHUNK_TILE_COUNT;
 	/*log_info("Added component at chunk %d, %d", res.chunk_id.x, res.chunk_id.y);*/
-	/*log_info("Added component at tile %d, %d", res.tile_id.x, res.tile_id.y);*/
+        /*log_info("Added component at tile %d, %d", res.tile_id.x, res.tile_id.y);*/
 	switch (res.type) {
 		case COMP_TYPE_BASE: {
 
@@ -139,6 +139,8 @@ bool component_exists_at(Components *components, Vector2 pos) {
 }
 
 int main(void) {
+	width = screen_width*SCL;
+	height = screen_height*SCL;
 	DEBUG = true;
 	size_t max_components_count = MAX_CHUNK_COUNT*(CHUNK_TILE_COUNT*CHUNK_TILE_COUNT);
 	log_info("Max components count: %zu", max_components_count);
@@ -154,21 +156,33 @@ int main(void) {
 
 	Vector2 mpos = {0};
 	Camera2D camera = {
-		.offset = CLITERAL(Vector2) { WIDTH * 0.5f, HEIGHT * 0.5f },
-		.target = CLITERAL(Vector2) { WIDTH * 0.5f, HEIGHT * 0.5f },
+		.offset = CLITERAL(Vector2) { width * 0.5f, height * 0.5f },
+		.target = CLITERAL(Vector2) { width * 0.5f, height * 0.5f },
 		.rotation = 0.f,
 		.zoom = 1.f,
 	};
 	float camera_move_speed = 200.f;
 
-	RenderTexture2D ren_tex = init_window(SCREEN_WIDTH, SCREEN_HEIGHT, SCL, "Bit Game");
+	RenderTexture2D ren_tex = init_window(screen_width, screen_height, SCL, "Bit Game");
 
+	SetWindowState(FLAG_WINDOW_RESIZABLE);
 	// Stats
 	int turn = 0;
 	int bit = 0;
 
 	Font font = GetFontDefault();
 	while (!WindowShouldClose()) {
+
+		if (IsWindowResized()) {
+			UnloadRenderTexture(ren_tex);
+			screen_width = GetScreenWidth();
+			screen_height = GetScreenHeight();
+			width = screen_width*SCL;
+			height = screen_height*SCL;
+			log_info("Resized SCREEN: %dx%d RENDER: %dx%d", screen_width, screen_height, width, height);
+			ren_tex = LoadRenderTexture(width, height);
+		}
+
 		temp_buff.count = 0;
 		BeginDrawing();
 		BeginTextureMode(ren_tex);
@@ -224,7 +238,7 @@ int main(void) {
 		EndMode2D();
 
 		// Draw stats
-		Vector2 top_right = v2(WIDTH, 0.f);
+		Vector2 top_right = v2(width, 0.f);
 		const char *bit_str = tprintf("Bits: %08d", bit);
 		draw_text_aligned(font, bit_str, top_right, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
 
@@ -233,7 +247,7 @@ int main(void) {
 		draw_text_aligned(font, turn_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
 
 		EndTextureMode();
-		draw_ren_tex(ren_tex, SCREEN_WIDTH, SCREEN_HEIGHT);
+		draw_ren_tex(ren_tex, screen_width, screen_height);
 		EndDrawing();
 	}
 
