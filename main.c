@@ -28,8 +28,8 @@ Vector2 v2_aligned_to_chunk(Vector2 v) { return v2_aligned_to_by(v, TILE_SIZE*CH
 
 /// Debug
 void debug_draw_world_grid(float size, Camera2D camera, Color color) {
-	Vector2 world_top_left = GetScreenToWorld2D(CLITERAL(Vector2) { 0.f, 0.f }, camera);
-	Vector2 world_bottom_right = GetScreenToWorld2D(CLITERAL(Vector2) { width, height }, camera);
+	Vector2 world_top_left = GetScreenToWorld2D(v2( 0.f, 0.f ), camera);
+	Vector2 world_bottom_right = GetScreenToWorld2D(v2( width, height ), camera);
 	Vector2i view_size = {
 		.x = world_bottom_right.x - world_top_left.x,
 		.y = world_bottom_right.y - world_top_left.y,
@@ -60,6 +60,17 @@ typedef enum {
 	COMP_TYPE_COUNT,
 } Component_type;
 
+const char *component_type_as_str(const Component_type type) {
+    switch(type) {
+        case COMP_TYPE_BASE: return "Base";
+        case COMP_TYPE_DISPLAY: return "Display";
+        case COMP_TYPE_OUTPUT: return "Output";
+        case COMP_TYPE_COUNT: 
+        default: ASSERT(false, "UNREACHABLE!");
+    }
+    return "INVALID";
+}
+
 typedef struct {
 	Component_type type;
 	Vector2 pos;
@@ -74,7 +85,7 @@ Component make_component(Component_type type, const Vector2 pos) {
 	Component res = {
 		.type = type,
 		.pos = pos,
-		.size = CLITERAL(Vector2) { TILE_SIZE, TILE_SIZE }
+		.size = v2( TILE_SIZE, TILE_SIZE )
 	};
 
 	// Calculate chunk and tile id based on position
@@ -176,8 +187,8 @@ int main(void) {
 
 	Vector2 mpos = {0};
 	Camera2D camera = {
-		.offset = CLITERAL(Vector2) { width * 0.5f, height * 0.5f },
-		.target = CLITERAL(Vector2) { width * 0.5f, height * 0.5f },
+		.offset = v2( width * 0.5f, height * 0.5f ),
+		.target = v2( width * 0.5f, height * 0.5f ),
 		.rotation = 0.f,
 		.zoom = 1.f,
 	};
@@ -192,6 +203,8 @@ int main(void) {
 	int bit = 0;
 
 	Component current_selected_comp = make_component(COMP_TYPE_BASE, v2xx(0.0));
+    Component hovering_comp = make_component(COMP_TYPE_BASE, v2xx(0.f));
+    int current_output_component_expected_value = 4;
 
 	Font font = GetFontDefault();
 	while (!WindowShouldClose()) {
@@ -205,7 +218,6 @@ int main(void) {
 			ren_tex = LoadRenderTexture(width, height);
 		}
 
-
 		temp_buff.count = 0;
 		BeginDrawing();
 		BeginTextureMode(ren_tex);
@@ -217,11 +229,14 @@ int main(void) {
 		/*// Camera zoom*/
 		/*camera.zoom = Clamp(camera.zoom + GetMouseWheelMove() * delta * 10.f, 0.5f, 5.f);*/
 		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
-			add_base_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
-
-		}
-		if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
-			add_display_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
+            log_info("Added %s component!", component_type_as_str(current_selected_comp.type));
+            switch (current_selected_comp.type) {
+                case COMP_TYPE_BASE: add_base_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera))); break;
+                case COMP_TYPE_DISPLAY: add_display_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera))); break;
+                case COMP_TYPE_OUTPUT: add_output_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)), current_output_component_expected_value); break;
+                case COMP_TYPE_COUNT: 
+                default: ASSERT(false, "UNREACHABLE!");
+            }
 		}
 
 		// Update
@@ -242,7 +257,15 @@ int main(void) {
 			camera.target.y += camera_move_speed * delta;
 		}
 
-		// clamp camera to positive axis.
+        // Switch current component type
+        if (IsKeyPressed(KEY_Q)) {
+            current_selected_comp.type = current_selected_comp.type <= 0 ? COMP_TYPE_COUNT-1 : current_selected_comp.type-1;
+        }
+        if (IsKeyPressed(KEY_E)) {
+            current_selected_comp.type = current_selected_comp.type >= COMP_TYPE_COUNT-1 ? 0 : current_selected_comp.type+1;
+        }
+
+		// Clamp camera to positive axis.
 		camera.target.x = Clamp(camera.target.x, camera.offset.x-1, (MAX_CHUNK_COUNT*CHUNK_TILE_COUNT*TILE_SIZE)-camera.offset.x);
 		camera.target.y = Clamp(camera.target.y, camera.offset.y, (MAX_CHUNK_COUNT*CHUNK_TILE_COUNT*TILE_SIZE)-camera.offset.y+1);
 		BeginMode2D(camera);
@@ -272,6 +295,10 @@ int main(void) {
 		const char *turn_str = tprintf("Turn: %10d", turn);
 		Vector2 p = Vector2Add(top_right, v2(0, TILE_SIZE));
 		draw_text_aligned(font, turn_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
+
+        const char *current_selected_comp_str = tprintf("Comp: %s", component_type_as_str(current_selected_comp.type));
+        p = Vector2Add(top_right, v2(0, TILE_SIZE*2));
+        draw_text_aligned(font, current_selected_comp_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, YELLOW);
 
 		EndTextureMode();
 		draw_ren_tex(ren_tex, screen_width, screen_height);
