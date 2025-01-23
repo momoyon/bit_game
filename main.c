@@ -8,6 +8,7 @@ int screen_height = 720*0.5;
 int width = 0;
 int height = 0;
 
+
 #define COLOR1 GetColor(0x181818FF)
 #define TILE_SIZE 16
 #define CHUNK_TILE_COUNT 16
@@ -33,6 +34,7 @@ void debug_draw_world_grid(float size, Camera2D camera, Color color) {
 		.x = world_bottom_right.x - world_top_left.x,
 		.y = world_bottom_right.y - world_top_left.y,
 	};
+
 	for (int y = -1; y < (view_size.y/size)+1; ++y) {
 		Vector2 s = { .x = (float)-size, .y = (float)y*size, };
 		Vector2 e = { .x = (float)view_size.x + size, .y = (float)y*size, };
@@ -40,6 +42,7 @@ void debug_draw_world_grid(float size, Camera2D camera, Color color) {
 		e = v2_aligned_to_by(Vector2Add(e, world_top_left), size);
 		DrawLineV(s, e, color);
 	}
+
 	for (int x = -1; x < (view_size.x/size)+1; ++x) {
 		Vector2 s = { .x = (float)x*size, .y = (float)-size, };
 		Vector2 e = { .x = (float)x*size, .y = (float)view_size.y + size, };
@@ -49,9 +52,11 @@ void debug_draw_world_grid(float size, Camera2D camera, Color color) {
 	}
 }
 
+
 typedef enum {
 	COMP_TYPE_BASE,
 	COMP_TYPE_DISPLAY,
+	COMP_TYPE_OUTPUT,
 	COMP_TYPE_COUNT,
 } Component_type;
 
@@ -62,7 +67,7 @@ typedef struct {
 	Vector2i chunk_id; // Chunk id in the world
 	Vector2i tile_id;  // Tile id in the chunk
 
-	int value;
+	int value; // Display value for DISPLAY; Expected value for OUTPUT;
 } Component;
 
 Component make_component(Component_type type, const Vector2 pos) {
@@ -81,24 +86,31 @@ Component make_component(Component_type type, const Vector2 pos) {
         /*log_info("Added component at tile %d, %d", res.tile_id.x, res.tile_id.y);*/
 	switch (res.type) {
 		case COMP_TYPE_BASE: {
-
-				     } break;
+		} break;
 		case COMP_TYPE_DISPLAY: {
+		} break;
+		case COMP_TYPE_OUTPUT: {
 		} break;
 	        case COMP_TYPE_COUNT:
 	        default: ASSERT(0, "UNREACHABLE!");
 	}
+
 	return res;
 }
 
 void draw_component(Component* comp) {
 	switch (comp->type) {
 		case COMP_TYPE_BASE: {
-			DrawRectangleV(comp->pos, comp->size, RED);
+			DrawRectangleV(comp->pos, comp->size, GRAY);
 			draw_text_aligned(GetFontDefault(), "C", Vector2Add(comp->pos, Vector2Scale(comp->size, 0.5f)), TILE_SIZE, TEXT_ALIGN_V_CENTER, TEXT_ALIGN_H_CENTER, WHITE);
 		} break;
 		case COMP_TYPE_DISPLAY: {
 			DrawRectangleV(comp->pos, comp->size, ORANGE);
+			const char *value_str = tprintf("%d", comp->value);
+			draw_text_aligned(GetFontDefault(), value_str, Vector2Add(comp->pos, Vector2Scale(comp->size, 0.5f)), TILE_SIZE, TEXT_ALIGN_V_CENTER, TEXT_ALIGN_H_CENTER, WHITE);
+		} break;
+		case COMP_TYPE_OUTPUT: {
+			DrawRectangleV(comp->pos, comp->size, RED);
 			const char *value_str = tprintf("%d", comp->value);
 			draw_text_aligned(GetFontDefault(), value_str, Vector2Add(comp->pos, Vector2Scale(comp->size, 0.5f)), TILE_SIZE, TEXT_ALIGN_V_CENTER, TEXT_ALIGN_H_CENTER, WHITE);
 		} break;
@@ -125,6 +137,13 @@ void add_display_component(Components *components, Vector2 pos) {
 	da_append(*components, comp);
 }
 
+void add_output_component(Components *components, Vector2 pos, int expected_value) {
+	Component comp = make_component(COMP_TYPE_OUTPUT, pos);
+	comp.value = expected_value;
+	da_append(*components, comp);
+}
+
+
 bool component_exists_at(Components *components, Vector2 pos) {
 	Vector2i chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
 	Vector2i tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
@@ -135,6 +154,7 @@ bool component_exists_at(Components *components, Vector2 pos) {
 			return true;
 		}
 	}
+
 	return false;
 }
 
@@ -149,10 +169,10 @@ int main(void) {
 		.count = 0,
 		.capacity = max_components_count,
 	};
+
 	Components components_next = {
 		.data = malloc(sizeof(Component)*max_components_count),
 	};
-
 
 	Vector2 mpos = {0};
 	Camera2D camera = {
@@ -161,6 +181,7 @@ int main(void) {
 		.rotation = 0.f,
 		.zoom = 1.f,
 	};
+
 	float camera_move_speed = 200.f;
 
 	RenderTexture2D ren_tex = init_window(screen_width, screen_height, SCL, "Bit Game");
@@ -170,18 +191,20 @@ int main(void) {
 	int turn = 0;
 	int bit = 0;
 
+	Component current_selected_comp = make_component(COMP_TYPE_BASE, v2xx(0.0));
+
 	Font font = GetFontDefault();
 	while (!WindowShouldClose()) {
-
 		if (IsWindowResized()) {
 			UnloadRenderTexture(ren_tex);
 			screen_width = GetScreenWidth();
 			screen_height = GetScreenHeight();
 			width = screen_width*SCL;
 			height = screen_height*SCL;
-			log_info("Resized SCREEN: %dx%d RENDER: %dx%d", screen_width, screen_height, width, height);
+			// log_info("Resized SCREEN: %dx%d RENDER: %dx%d", screen_width, screen_height, width, height);
 			ren_tex = LoadRenderTexture(width, height);
 		}
+
 
 		temp_buff.count = 0;
 		BeginDrawing();
@@ -195,10 +218,12 @@ int main(void) {
 		/*camera.zoom = Clamp(camera.zoom + GetMouseWheelMove() * delta * 10.f, 0.5f, 5.f);*/
 		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
 			add_base_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
+
 		}
 		if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
 			add_display_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
 		}
+
 		// Update
 		for (int i = 0; i < (int)components.count; ++i) {
 			// TODO: update components
@@ -221,6 +246,7 @@ int main(void) {
 		camera.target.x = Clamp(camera.target.x, camera.offset.x-1, (MAX_CHUNK_COUNT*CHUNK_TILE_COUNT*TILE_SIZE)-camera.offset.x);
 		camera.target.y = Clamp(camera.target.y, camera.offset.y, (MAX_CHUNK_COUNT*CHUNK_TILE_COUNT*TILE_SIZE)-camera.offset.y+1);
 		BeginMode2D(camera);
+
 		// Draw
 		for (int i = 0; i < (int)components.count; ++i) {
 			// TODO: draw components
@@ -228,11 +254,12 @@ int main(void) {
 			draw_component(c);
 		}
 
+
 		if (DEBUG_DRAW) {
 			debug_draw_world_grid(TILE_SIZE, camera, ColorAlpha(WHITE, 0.25f));
 			debug_draw_world_grid(TILE_SIZE*CHUNK_TILE_COUNT, camera, ColorAlpha(WHITE, 1.f));
 			// Draw origin of world
-			DrawCircleV(CLITERAL(Vector2) { 0.f, 0.f }, 2.f, RED);
+			DrawCircleV(v2xx(0.f), 2.f, RED);
 		}
 
 		EndMode2D();
@@ -254,3 +281,4 @@ int main(void) {
 	close_window(ren_tex);
 	return 0;
 }
+
