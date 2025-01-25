@@ -1,8 +1,10 @@
 #define ENGINE_IMPLEMENTATION
 #include <engine.h>
 
-int screen_width  = 1280*0.5;
-int screen_height = 720*0.5;
+// TODO: Add wires from start to end component using A* algo
+
+int screen_width  = 1280;
+int screen_height = 720;
 
 #define SCL 0.5f
 int width = 0;
@@ -302,6 +304,8 @@ int main(void) {
     Component hovering_comp = make_component(COMP_TYPE_BASE, v2xx(0.f));
     int current_output_component_expected_value = 4;
 
+    Vector2 mpos_from = {0};
+
     Font font = GetFontDefault();
     while (!WindowShouldClose()) {
         if (IsWindowResized()) {
@@ -334,8 +338,10 @@ int main(void) {
                 default: ASSERT(false, "UNREACHABLE!");
             }
         }
-        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera))) && !wire_exists_at(&wires, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
-            add_wire_at(&wires, WIRE_DIR_UP, WIRE_DIR_LEFT, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)));
+
+        // Mouse from logic
+        if (IsMouseButtonPressed(MOUSE_MIDDLE_BUTTON)) {
+            mpos_from = v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera));
         }
 
         // Update
@@ -344,7 +350,7 @@ int main(void) {
         }
 
         for (int i = 0; i < (int)wires.count; ++i) {
-            // TODO: update components
+            // TODO: update wires
         }
 
         if (IsKeyDown(KEY_A)) {
@@ -384,11 +390,18 @@ int main(void) {
             draw_wire(w);
         }
 
+        // NOTE: This is in camera view
         if (DEBUG_DRAW) {
             debug_draw_world_grid(TILE_SIZE, camera, ColorAlpha(WHITE, 0.25f));
             debug_draw_world_grid(TILE_SIZE*CHUNK_TILE_COUNT, camera, ColorAlpha(WHITE, 1.f));
             // Draw origin of world
             DrawCircleV(v2xx(0.f), 2.f, RED);
+
+            // Draw mouse from
+            if (IsMouseButtonDown(MOUSE_MIDDLE_BUTTON)) {
+                DrawRectangleV(Vector2Subtract(mpos_from, Vector2Scale(v2xx(TILE_SIZE*0.25f), 0.5f)), v2xx(TILE_SIZE*0.25f), WHITE);
+                DrawLineV(mpos_from, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)), WHITE);
+            }
         }
 
         EndMode2D();
@@ -407,6 +420,7 @@ int main(void) {
         draw_text_aligned(font, current_selected_comp_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, YELLOW);
 
 
+        // NOTE: This is in screen view
         if (DEBUG_DRAW) {
             const char *components_count_str = tprintf("Comps count: %zu", components.count);
             Vector2 p = v2xx(0.f);
@@ -414,6 +428,7 @@ int main(void) {
             const char *wires_count_str = tprintf("Wires count: %zu", wires.count);
             p.y += TILE_SIZE;
             draw_text_aligned(font, wires_count_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_LEFT, WHITE);
+
         }
 
         EndTextureMode();
