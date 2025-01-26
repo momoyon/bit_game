@@ -1,3 +1,7 @@
+#define COMMONLIB_REMOVE_PREFIX
+#define COMMONLIB_IMPLEMENTATION
+#include <commonlib.h>
+
 #define ENGINE_IMPLEMENTATION
 #include <engine.h>
 
@@ -55,7 +59,6 @@ void debug_draw_world_grid(float size, Camera2D camera, Color color) {
     }
 }
 
-
 typedef enum {
     COMP_TYPE_BASE,
     COMP_TYPE_DISPLAY,
@@ -72,6 +75,20 @@ const char *component_type_as_str(const Component_type type) {
         default: ASSERT(false, "UNREACHABLE!");
     }
     return "INVALID";
+}
+
+
+void get_chunk_and_tile_id_from_pos(Vector2 pos, Vector2i *chunk_id_out, Vector2i *tile_id_out) {
+    // Calculate chunk and tile id based on position
+    Vector2i chunk_id = {0};
+    Vector2i tile_id = {0};
+    chunk_id  = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
+    tile_id   = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
+    tile_id.x = tile_id.x % CHUNK_TILE_COUNT;
+    tile_id.y = tile_id.y % CHUNK_TILE_COUNT;
+
+    *chunk_id_out = chunk_id;
+    *tile_id_out = tile_id;
 }
 
 typedef struct {
@@ -91,11 +108,7 @@ Component make_component(Component_type type, const Vector2 pos) {
         .size = v2( TILE_SIZE, TILE_SIZE )
     };
 
-    // Calculate chunk and tile id based on position
-    res.chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
-    res.tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
-    res.tile_id.x = res.tile_id.x % CHUNK_TILE_COUNT;
-    res.tile_id.y = res.tile_id.y % CHUNK_TILE_COUNT;
+    get_chunk_and_tile_id_from_pos(pos, &res.chunk_id, &res.tile_id);
     /*log_info("Added component at chunk %d, %d", res.chunk_id.x, res.chunk_id.y);*/
         /*log_info("Added component at tile %d, %d", res.tile_id.x, res.tile_id.y);*/
     switch (res.type) {
@@ -159,11 +172,7 @@ Wire make_wire(Wire_dir from, Wire_dir to, Vector2 pos) {
         .to = to,
     };
 
-    // Calculate chunk and tile id based on position
-    res.chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
-    res.tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
-    res.tile_id.x = res.tile_id.x % CHUNK_TILE_COUNT;
-    res.tile_id.y = res.tile_id.y % CHUNK_TILE_COUNT;
+    get_chunk_and_tile_id_from_pos(pos, &res.chunk_id, &res.tile_id);
 
     return res;
 }
@@ -171,7 +180,6 @@ Wire make_wire(Wire_dir from, Wire_dir to, Vector2 pos) {
 void draw_wire_dir(Vector2 pos, const Wire_dir dir, Color color) {
     switch (dir) {
         case WIRE_DIR_UP: {
-    /*RLAPI void DrawRectangleV(Vector2 position, Vector2 size, Color color);                                  // Draw a color-filled rectangle (Vector version)*/
             Vector2 r = v2(WIRE_WIDTH, TILE_SIZE*0.6f);
             DrawRectangleV(Vector2Add(pos, v2(TILE_SIZE*0.5f-(r.x*0.5f), 0.f)), r, color);
         } break;
@@ -198,7 +206,7 @@ void draw_wire(Wire *wire) {
 }
 
 typedef struct {
-    Component *data;
+    Component *items;
     size_t count;
     size_t capacity;
 } Components;
@@ -221,14 +229,13 @@ void add_output_component(Components *components, Vector2 pos, int expected_valu
     da_append(*components, comp);
 }
 
-
 bool component_exists_at(Components *components, Vector2 pos) {
     Vector2i chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
     Vector2i tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
     tile_id.x = tile_id.x % CHUNK_TILE_COUNT;
     tile_id.y = tile_id.y % CHUNK_TILE_COUNT;
     for (int i = 0; i < (int)components->count; ++i) {
-        if (v2i_equal(components->data[i].chunk_id, chunk_id) && v2i_equal(components->data[i].tile_id, tile_id)) {
+        if (v2i_equal(components->items[i].chunk_id, chunk_id) && v2i_equal(components->items[i].tile_id, tile_id)) {
             return true;
         }
     }
@@ -237,7 +244,7 @@ bool component_exists_at(Components *components, Vector2 pos) {
 }
 
 typedef struct {
-    Wire *data;
+    Wire *items;
     size_t count;
     size_t capacity;
 } Wires;
@@ -253,7 +260,7 @@ bool wire_exists_at(Wires *wires, Vector2 pos) {
     tile_id.x = tile_id.x % CHUNK_TILE_COUNT;
     tile_id.y = tile_id.y % CHUNK_TILE_COUNT;
     for (int i = 0; i < (int)wires->count; ++i) {
-        if (v2i_equal(wires->data[i].chunk_id, chunk_id) && v2i_equal(wires->data[i].tile_id, tile_id)) {
+        if (v2i_equal(wires->items[i].chunk_id, chunk_id) && v2i_equal(wires->items[i].tile_id, tile_id)) {
             return true;
         }
     }
@@ -264,21 +271,20 @@ bool wire_exists_at(Wires *wires, Vector2 pos) {
 int main(void) {
     width = screen_width*SCL;
     height = screen_height*SCL;
-    DEBUG = true;
     size_t max_components_count = MAX_CHUNK_COUNT*(CHUNK_TILE_COUNT*CHUNK_TILE_COUNT);
     log_info("Max components count: %zu", max_components_count);
     Components components = {
-        .data = malloc(sizeof(Component)*max_components_count),
+        .items = malloc(sizeof(Component)*max_components_count),
         .count = 0,
         .capacity = max_components_count,
     };
 
     Components components_next = {
-        .data = malloc(sizeof(Component)*max_components_count),
+        .items = malloc(sizeof(Component)*max_components_count),
     };
 
     Wires wires = {
-        .data = malloc(sizeof(Component)*max_components_count),
+        .items = malloc(sizeof(Component)*max_components_count),
         .count = 0,
         .capacity = max_components_count,
     };
@@ -300,9 +306,14 @@ int main(void) {
     int turn = 0;
     int bit = 0;
 
-    Component current_selected_comp = make_component(COMP_TYPE_BASE, v2xx(0.0));
-    Component hovering_comp = make_component(COMP_TYPE_BASE, v2xx(0.f));
+    // NOTE: I couldn't figure out a more suitable name than suffixing with _stub...
+    // NOTE: You (me) should know what i (you) meant tho.
+    Component current_selected_comp_stub = make_component(COMP_TYPE_BASE, v2xx(0.0));
+    Component hovering_comp_stub = make_component(COMP_TYPE_BASE, v2xx(0.f));
     int current_output_component_expected_value = 4;
+
+    // NOTE: Having a copy of the hovering comp should be fine since it's a lightweight struct (for now)
+    Component hovering_comp = make_component(COMP_TYPE_BASE, v2xx(0.f));
 
     Vector2 mpos_from = {0};
 
@@ -326,22 +337,36 @@ int main(void) {
         float delta = GetFrameTime();
 
         mpos = get_mpos_scaled();
+
+        Vector2 mpos_world_tile_aligned = v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera));
         /*// Camera zoom*/
         /*camera.zoom = Clamp(camera.zoom + GetMouseWheelMove() * delta * 10.f, 0.5f, 5.f);*/
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !component_exists_at(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)))) {
-            log_info("Added %s component!", component_type_as_str(current_selected_comp.type));
-            switch (current_selected_comp.type) {
-                case COMP_TYPE_BASE: add_base_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera))); break;
-                case COMP_TYPE_DISPLAY: add_display_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera))); break;
-                case COMP_TYPE_OUTPUT: add_output_component(&components, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)), current_output_component_expected_value); break;
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !component_exists_at(&components, mpos_world_tile_aligned)) {
+            log_info("Added %s component!", component_type_as_str(current_selected_comp_stub.type));
+            switch (current_selected_comp_stub.type) {
+                case COMP_TYPE_BASE: add_base_component(&components, mpos_world_tile_aligned); break;
+                case COMP_TYPE_DISPLAY: add_display_component(&components, mpos_world_tile_aligned); break;
+                case COMP_TYPE_OUTPUT: add_output_component(&components, mpos_world_tile_aligned, current_output_component_expected_value); break;
                 case COMP_TYPE_COUNT:
                 default: ASSERT(false, "UNREACHABLE!");
             }
         }
 
-        // Mouse from logic
+        // Hovering over component logic
+        for (int i = 0; i < (int)components.count; ++i) {
+            Component *c = &components.items[i];
+            Vector2i chunk_id, tile_id;
+
+            get_chunk_and_tile_id_from_pos(mpos_world_tile_aligned, &chunk_id, &tile_id);
+
+            if (v2i_equal(chunk_id, c->chunk_id) && v2i_equal(tile_id, c->tile_id)) {
+                hovering_comp_stub = *c;
+            }
+        }
+
+        // Mpos from logic
         if (IsMouseButtonPressed(MOUSE_MIDDLE_BUTTON)) {
-            mpos_from = v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera));
+            mpos_from = mpos_world_tile_aligned;
         }
 
         // Update
@@ -368,10 +393,10 @@ int main(void) {
 
         // Switch current component type
         if (IsKeyPressed(KEY_Q)) {
-            current_selected_comp.type = current_selected_comp.type <= 0 ? COMP_TYPE_COUNT-1 : current_selected_comp.type-1;
+            current_selected_comp_stub.type = current_selected_comp_stub.type <= 0 ? COMP_TYPE_COUNT-1 : current_selected_comp_stub.type-1;
         }
         if (IsKeyPressed(KEY_E)) {
-            current_selected_comp.type = current_selected_comp.type >= COMP_TYPE_COUNT-1 ? 0 : current_selected_comp.type+1;
+            current_selected_comp_stub.type = current_selected_comp_stub.type >= COMP_TYPE_COUNT-1 ? 0 : current_selected_comp_stub.type+1;
         }
 
         // Clamp camera to positive axis.
@@ -381,14 +406,18 @@ int main(void) {
 
         // Draw
         for (int i = 0; i < (int)components.count; ++i) {
-            Component *c = &components.data[i];
+            Component *c = &components.items[i];
             draw_component(c);
         }
 
         for (int i = 0; i < (int)wires.count; ++i) {
-            Wire *w = &wires.data[i];
+            Wire *w = &wires.items[i];
             draw_wire(w);
         }
+
+        // Draw hovering component
+        hovering_comp_stub.pos = mpos;
+        draw_component(&hovering_comp_stub);
 
         // NOTE: This is in camera view
         if (DEBUG_DRAW) {
@@ -399,8 +428,9 @@ int main(void) {
 
             // Draw mouse from
             if (IsMouseButtonDown(MOUSE_MIDDLE_BUTTON)) {
-                DrawRectangleV(Vector2Subtract(mpos_from, Vector2Scale(v2xx(TILE_SIZE*0.25f), 0.5f)), v2xx(TILE_SIZE*0.25f), WHITE);
-                DrawLineV(mpos_from, v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)), WHITE);
+                Vector2 p = Vector2Add(mpos_from, v2xx(TILE_SIZE*0.5f));
+                DrawRectangleV(Vector2Subtract(p, v2xx(TILE_SIZE*0.25f*0.5f)), v2xx(TILE_SIZE*0.25f), WHITE);
+                DrawLineV(p, Vector2Add(v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)), v2xx(TILE_SIZE*0.5f)), WHITE);
             }
         }
 
@@ -415,10 +445,9 @@ int main(void) {
         Vector2 p = Vector2Add(top_right, v2(0, TILE_SIZE));
         draw_text_aligned(font, turn_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, WHITE);
 
-        const char *current_selected_comp_str = tprintf("Comp: %s", component_type_as_str(current_selected_comp.type));
+        const char *current_selected_comp_stub_str = tprintf("Comp: %s", component_type_as_str(current_selected_comp_stub.type));
         p = Vector2Add(top_right, v2(0, TILE_SIZE*2));
-        draw_text_aligned(font, current_selected_comp_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, YELLOW);
-
+        draw_text_aligned(font, current_selected_comp_stub_str, p, TILE_SIZE, TEXT_ALIGN_V_TOP, TEXT_ALIGN_H_RIGHT, YELLOW);
 
         // NOTE: This is in screen view
         if (DEBUG_DRAW) {

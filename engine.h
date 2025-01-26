@@ -7,41 +7,6 @@
 #include <raylib.h>
 #include <raymath.h>
 
-bool DEBUG = false;
-
-#define ASSERT(cond, msg) do {\
-		if (!(cond)) {\
-			fprintf(stderr, "%s:%d:0 ASSERTION FAILED: %s, %s\n", __FILE__, __LINE__, #cond, msg);\
-			exit(1);\
-		}\
-	} while (0)
-
-#define log_error(fmt, ...) do {\
-		fprintf(stderr, "%s "fmt"\n", "[ERROR]", ##__VA_ARGS__);\
-	} while (0)
-#define log_info(fmt, ...) do {\
-		fprintf(stdout, "%s "fmt"\n", "[INFO]", ##__VA_ARGS__);\
-	} while (0)
-#define log_warning(fmt, ...) do {\
-		fprintf(stdout, "%s "fmt"\n", "[WARNING]", ##__VA_ARGS__);\
-	} while (0)
-
-#define DYNAMIC_ARRAY_INITIAL_CAPACITY (sizeof(size_t))
-
-#define da_append(da, elm) do {\
-		if ((da).data == NULL) {\
-			(da).capacity = DYNAMIC_ARRAY_INITIAL_CAPACITY;\
-			(da).count = 0;\
-			(da).data = malloc(sizeof(elm) * (da).capacity);\
-		}\
-		if ((da).count + 1 > (da).capacity) {\
-			(da).capacity *= 2;\
-			if (DEBUG) log_info("%s realloced!", #da);\
-			ASSERT(realloc((da).data, (da).capacity * sizeof(*(da).data)) != NULL, "TODO: Log error instead of asserting");\
-		}\
-		(da).data[(da).count++] = elm;\
-	} while (0)
-
 #define TEMP_BUFF_CAP (1024*4)
 typedef struct {
 	char data[TEMP_BUFF_CAP];
