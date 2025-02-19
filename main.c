@@ -5,7 +5,11 @@
 #define ENGINE_IMPLEMENTATION
 #include <engine.h>
 
+#define STB_DS_IMPLEMENTATION
+#include <stb_ds.h>
+
 // TODO: Add wires from start to end component using A* algo
+//
 
 int screen_width  = 1280;
 int screen_height = 720;
@@ -22,6 +26,116 @@ int height = 0;
 #define WIRE_WIDTH (TILE_SIZE/4)
 
 static bool DEBUG_DRAW = true;
+
+typedef struct {
+    Vector2i tile_id, chunk_id;
+} Coord;
+
+#define COORD_ARG(c) c.tile_id.x, c.tile_id.y, c.chunk_id.x, c.chunk_id.y
+
+#define INVALID_COORD ((Coord) { { -1, -1 }, { -1, -1 } })
+
+bool coord_eq(Coord a, Coord b) {
+    return memcmp(&a, &b, sizeof(Coord)) == 0;
+}
+
+typedef struct {
+    Coord *items;
+    size_t count;
+    size_t capacity;
+} Neighbors;
+
+// TODO: We straight up ignore chunk id here, so we don't get neighbors from other chunks
+Neighbors get_coord_nbors(size_t ti, size_t tj, size_t chi, size_t chj) {
+    Neighbors nbors = {0};
+    // NOTE: We _can_ go diagonally!!!
+    int xdirs[] = { -1, 1, 0, 0, -1, -1, 1, 1 };
+    int ydirs[] = { 0, 0, -1, 1, -1, 1, -1, 1 };
+
+    for (size_t x = 0; x < sizeof(xdirs) / sizeof(*xdirs); ++x) {
+        int di = xdirs[x];
+        int dj = ydirs[x];
+
+        int nti = ti + di;
+        int ntj = tj + dj;
+
+        /*printf("(%d, %d) + (%d, %d) -> (%d, %d)\n", i, j, di, dj, ni, nj);*/
+
+        // Check if neighbor is within bounds
+        if (0 <= nti && nti < CHUNK_TILE_COUNT && 0 <= ntj && ntj < CHUNK_TILE_COUNT) {
+            Coord n = {
+                .tile_id  = { nti, ntj },
+                .chunk_id = { chi, chj },
+            };
+            da_append(nbors, n);
+        }
+    }
+
+    /*printf("%s::nbors.count: %zu\n", __func__, nbors.count);*/
+
+    return nbors;
+}
+
+typedef struct {
+    Coord *items;
+    size_t count;
+    size_t capacity;
+} Queue;
+#define QUEUE_INITIAL_CAPACITY 256
+#define q_put da_append
+
+// NOTE: pop from left
+Coord q_get(Queue *q) {
+    if (q->count <= 0) return INVALID_COORD;
+    Coord res = q->items[0];
+
+    memcpy(q->items, &(q->items[1]), (--q->count) * sizeof(Coord));
+
+    return res;
+}
+
+typedef struct {
+    Coord key;
+    Coord value;
+} Came_from_KV;
+
+// A-star
+Came_from_KV *a_star(Coord start, Coord end) {
+    Queue frontier = {0};
+    q_put(frontier, start);
+    Came_from_KV *came_from = {0};
+    hmput(came_from, start, INVALID_COORD);
+    /*printf("came_from.count: %zu\n", hmlenu(came_from));*/
+
+    while (frontier.count > 0) {
+        Coord current = q_get(&frontier);
+        ASSERT(current.tile_id.x >= 0 && current.tile_id.y >= 0, "Sanity Check");
+        ASSERT(current.chunk_id.x >= 0 && current.chunk_id.y >= 0, "Sanity Check");
+        /*printf("current: %d, %d\n", current.i, current.j);*/
+        /*// TODO: Check if current is a wall*/
+        /*if (cell_at(current.i, current.j) == WALL) {*/
+        /*    continue;*/
+        /*}*/
+
+        if (coord_eq(current, end)) { 
+            printf("CURRENT == END, %s | came_from.count: %zu\n", __func__, hmlenu(came_from));
+            break;
+        }
+
+        Neighbors nbors = get_coord_nbors(current.tile_id.x, current.tile_id.y, current.chunk_id.x, current.chunk_id.y);
+        printf("Got %zu nbors for (%d, %d) [%d, %d]\n", nbors.count, current.tile_id.x, current.tile_id.y, current.chunk_id.x, current.chunk_id.y);
+        for (size_t _i = 0; _i < nbors.count; _i++) {
+            Coord n = nbors.items[_i];
+            if (hmgetp_null(came_from, n) == NULL) {
+                q_put(frontier, n);
+                hmput(came_from, n, current);
+            }
+        }
+        free(nbors.items);
+    }
+
+    return came_from;
+}
 
 Vector2 v2_aligned_to_by(Vector2 v, float by) {
     Vector2 res = {0};
@@ -229,6 +343,20 @@ void add_output_component(Components *components, Vector2 pos, int expected_valu
     da_append(*components, comp);
 }
 
+bool get_copy_of_component_at(Components *components, Component *copy, Vector2 pos) {
+    Vector2i chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
+    Vector2i tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
+    tile_id.x = tile_id.x % CHUNK_TILE_COUNT;
+    tile_id.y = tile_id.y % CHUNK_TILE_COUNT;
+    for (int i = 0; i < (int)components->count; ++i) {
+        if (v2i_equal(components->items[i].chunk_id, chunk_id) && v2i_equal(components->items[i].tile_id, tile_id)) {
+            memcpy(copy, &(components->items[i]), sizeof(Component));
+            return true;
+        }
+    }
+    return false;
+}
+
 bool component_exists_at(Components *components, Vector2 pos) {
     Vector2i chunk_id = v2vi(Vector2Divide(pos, v2xx(CHUNK_TILE_COUNT*TILE_SIZE)));
     Vector2i tile_id = v2vi(Vector2Divide(pos, v2xx(TILE_SIZE)));
@@ -273,6 +401,7 @@ int main(void) {
     height = screen_height*SCL;
     size_t max_components_count = MAX_CHUNK_COUNT*(CHUNK_TILE_COUNT*CHUNK_TILE_COUNT);
     log_info("Max components count: %zu", max_components_count);
+
     Components components = {
         .items = malloc(sizeof(Component)*max_components_count),
         .count = 0,
@@ -316,6 +445,9 @@ int main(void) {
     Component hovering_comp = make_component(COMP_TYPE_BASE, v2xx(0.f));
 
     Vector2 mpos_from = {0};
+
+    // For wire-path-finding
+    Coord start, end;
 
     Font font = GetFontDefault();
     while (!WindowShouldClose()) {
@@ -365,10 +497,45 @@ int main(void) {
         }
 
         // Mpos from logic
-        if (IsMouseButtonPressed(MOUSE_MIDDLE_BUTTON)) {
+        if (IsKeyPressed(KEY_M)) {
             mpos_from = mpos_world_tile_aligned;
+            Component comp_at;
+            if (get_copy_of_component_at(&components, &comp_at, mpos_from)) {
+                // TODO: Here we set the start of path
+                
+                /*log_info("Comp at mpos_from: %s", component_type_as_str(comp_at.type));*/
+            }
+            get_chunk_and_tile_id_from_pos(mpos_world_tile_aligned, &start.chunk_id, &start.tile_id);
         }
 
+        if (IsKeyReleased(KEY_M)) {
+            Component comp_at;
+            if (get_copy_of_component_at(&components, &comp_at, mpos_world_tile_aligned)) {
+                // TODO: Here we set the end of path
+                /*log_info("Comp at mpos_from: %s", component_type_as_str(comp_at.type));*/
+            }
+            get_chunk_and_tile_id_from_pos(mpos_world_tile_aligned, &end.chunk_id, &end.tile_id);
+
+            Came_from_KV *flow_chart = a_star(start, end);
+
+            log_info("path from (%d, %d) [%d, %d] -> (%d, %d) [%d, %d]", COORD_ARG(start), COORD_ARG(end));
+            log_info("flow_chart.count: %zu", hmlenu(flow_chart));
+
+            hmfree(flow_chart);
+        }
+
+        /* TEST: get_coord_nbors() test
+
+        if (IsKeyPressed(KEY_N)) {
+            Coord current_coord;
+            get_chunk_and_tile_id_from_pos(mpos_world_tile_aligned, &current_coord.chunk_id, &current_coord.tile_id);
+
+            Neighbors nbors = get_coord_nbors(current_coord.tile_id.x, current_coord.tile_id.y, current_coord.chunk_id.x, current_coord.chunk_id.y);
+            printf("Got %zu nbors for (%d, %d) [%d, %d]\n", nbors.count, current_coord.tile_id.x, current_coord.tile_id.y, current_coord.chunk_id.x, current_coord.chunk_id.y);
+            free(nbors.items);
+        }
+        */
+       
         // Update
         for (int i = 0; i < (int)components.count; ++i) {
             // TODO: update components
@@ -427,10 +594,11 @@ int main(void) {
             DrawCircleV(v2xx(0.f), 2.f, RED);
 
             // Draw mouse from
-            if (IsMouseButtonDown(MOUSE_MIDDLE_BUTTON)) {
+            if (IsKeyDown(KEY_M)) {
                 Vector2 p = Vector2Add(mpos_from, v2xx(TILE_SIZE*0.5f));
                 DrawRectangleV(Vector2Subtract(p, v2xx(TILE_SIZE*0.25f*0.5f)), v2xx(TILE_SIZE*0.25f), WHITE);
                 DrawLineV(p, Vector2Add(v2_aligned_to_tile(GetScreenToWorld2D(mpos, camera)), v2xx(TILE_SIZE*0.5f)), WHITE);
+
             }
         }
 
